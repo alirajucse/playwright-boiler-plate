@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "description": "Playwright Automation Project Boiler Plate",
   "main": "index.js",
-  "scripts": {},
+  "scripts": {
+    "test": "npx playwright test"
+  },
   "keywords": [],
   "author": "Ali",
   "license": "ISC",
