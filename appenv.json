@@ -1,0 +1,24 @@
+{
+  "default": "local",
+  "local": {
+    "baseUrl": "http://localhost:3000",
+    "apiUrl": "http://localhost:3000/api",
+    "apiKey": "local-api-key",
+    "userName": "your username",
+    "loginPassword": "your password!"
+  },
+  "dev": {
+    "baseUrl": "http://dev.example.com",
+    "apiUrl": "http://dev.example.com/api",
+    "apiKey": "dev-api-key",
+    "userName": "your username",
+    "loginPassword": "your password!"
+  },
+  "prod": {
+    "baseUrl": "https://www.demoblaze.com/",
+    "apiUrl": "https://api.demoblaze.com",
+    "apiKey": "prod-api-key",
+    "userName": "raju2",
+    "loginPassword": "raju123"
+  }
+}
