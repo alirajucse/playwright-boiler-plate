@@ -66,7 +66,7 @@ pipeline {
                         sh """
                             echo "Running Playwright tests in environment: ${APPENV}"
                             export APPENV="${APPENV}"
-                            npx playwright test --project=${APPENV} || true
+                            npx playwright test || true
                         """
                     } catch (err) {
                         echo "Test execution completed with some failures: ${err}"
