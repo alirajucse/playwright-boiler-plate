@@ -76,19 +76,20 @@ pipeline {
         }
 
         stage('Generate Reports') {
-            steps {
-                script {
-                    sh '''
-                        echo "Generating Playwright report"
-                        if [ -d "playwright-report" ]; then
-                            npx playwright show-report
-                        else
-                            echo "No Playwright report found."
-                        fi
-                    '''
-                }
-            }
+    steps {
+        script {
+            sh '''
+                echo "Generating Playwright report"
+                if [ -d "playwright-report" ]; then
+                    echo "Playwright report found. Generating..."
+                    npx playwright show-report --viewer=none
+                else
+                    echo "No Playwright report found. Skipping..."
+                fi
+            '''
         }
+    }
+}
 
         stage('Publish Results') {
             steps {
