@@ -34,7 +34,7 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
 
   // Reporter to use
-  reporter: "html",
+  reporter: [["html", { outputFolder: "playwright-report", open: "never" }]],
 
   use: {
     // Capture screenshot after each test failure.
