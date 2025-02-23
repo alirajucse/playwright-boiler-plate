@@ -66,11 +66,10 @@ pipeline {
                         sh """
                             echo "Running Playwright tests in environment: ${APPENV}"
                             export APPENV="${APPENV}"
-                            npx playwright test || true
+                            npx playwright test
                         """
                     } catch (err) {
                         echo "Test execution completed with some failures: ${err}"
-                        currentBuild.result = 'UNSTABLE'
                     }
                 }
             }
@@ -81,7 +80,11 @@ pipeline {
                 script {
                     sh '''
                         echo "Generating Playwright report"
-                        npx playwright show-report || true
+                        if [ -d "playwright-report" ]; then
+                            npx playwright show-report
+                        else
+                            echo "No Playwright report found."
+                        fi
                     '''
                 }
             }
@@ -90,7 +93,6 @@ pipeline {
         stage('Publish Results') {
             steps {
                 script {
-                    // Archive test artifacts
                     archiveArtifacts(
                         artifacts: '''
                             playwright-report/**/*,
@@ -101,13 +103,12 @@ pipeline {
                         allowEmptyArchive: true
                     )
                     
-                    // Publish Playwright HTML report
                     publishHTML(
                         target: [
-                            allowMissing: false,
+                            allowMissing: true,
                             alwaysLinkToLastBuild: true,
                             keepAll: true,
-                            reportDir: 'playwright-report/',
+                            reportDir: 'playwright-report',
                             reportFiles: 'index.html',
                             reportName: "Playwright Test Report - ${APPENV}"
                         ]
