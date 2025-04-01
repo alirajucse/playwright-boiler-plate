@@ -21,7 +21,7 @@ export class phonePage {
   }
 
   async clickOnPhoneCategory() {
-    await this.phoneCategory.click();
+    await this.phoneCategory.click({ force: true });
   }
   async phoneTableIsPresent() {
     await this.phoneTable.isVisible();
@@ -38,6 +38,6 @@ export class phonePage {
   }
 
   async clickOnNextButton() {
-    await this.nextButton.click();
+    await this.nextButton.click({ force: true });
   }
 }

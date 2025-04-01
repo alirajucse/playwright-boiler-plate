@@ -19,7 +19,7 @@ export class loginPage {
   }
 
   async clickLoginLink() {
-    await this.loginLink.click();
+    await this.loginLink.click({ force: true });
   }
 
   async inputUserName(username: string) {
