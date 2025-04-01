@@ -2,7 +2,7 @@ import { test, expect } from "@playwright/test";
 import { homePage } from "../pages/home";
 import { initializeTest, loginViaApi } from "../helpers/utils";
 
-test.describe("Home page", () => {
+test.describe("Home page title and menu links verification", () => {
   let home: homePage;
   test.beforeEach(async ({ page }) => {
     home = new homePage(page);

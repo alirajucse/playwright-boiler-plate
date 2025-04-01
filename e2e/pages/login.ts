@@ -14,13 +14,14 @@ export class loginPage {
     this.loginLink = page.locator("a", { hasText: "Log in" });
     this.userName = page.locator("#loginusername");
     this.password = page.locator("#loginpassword");
-    this.loginButton = page.locator(".btn btn-primary");
+    this.loginButton = page.getByRole('button', { name: 'Log in' });
     this.nameOfUser = page.locator("#nameofuser");
   }
 
   async clickLoginLink() {
     await this.loginLink.click();
   }
+
   async inputUserName(username: string) {
     await this.userName.fill(username);
   }
@@ -32,7 +33,6 @@ export class loginPage {
   }
 
   async verifyLogin() {
-    await this.nameOfUser.isVisible();
     await expect(this.nameOfUser).toHaveText(`Welcome ${appConfig.userName}`);
   }
 }

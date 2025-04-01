@@ -2,7 +2,7 @@ import { test } from "@playwright/test";
 import { initializeTest, loginViaApi } from "../helpers/utils";
 import { phonePage } from "../pages/phone";
 
-test.describe("Home page", () => {
+test.describe("Phone products are present and user able to navigate next and previous", () => {
   let phone: phonePage;
   test.beforeEach(async ({ page }) => {
     phone = new phonePage(page);
