@@ -1,31 +1,31 @@
 pipeline {
     agent any
 
-    parameters {
-        choice(
-            name: 'APPENV',
-            choices: ['local', 'dev', 'prod', 'preprod'],
-            description: 'Select the environment to run tests against'
-        )
+    triggers {
+        // Run twice every 24 hours (production only)
+        cron('H H/12 * * *')
     }
-    
+
     tools {
         nodejs 'NodeJS 18'
     }
 
     environment {
-        APPENV = "${params.APPENV}"
+        APPENV = 'prod'
+        CI = 'true'
+        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
     }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timestamps()
         ansiColor('xterm')
-        skipDefaultCheckout()
         disableConcurrentBuilds()
+        skipDefaultCheckout()
     }
 
     stages {
+
         stage('Checkout') {
             steps {
                 cleanWs()
@@ -33,103 +33,96 @@ pipeline {
             }
         }
 
-        stage('Setup') {
+        stage('Install Dependencies') {
             steps {
-                script {
-                    echo "Setting up environment: ${APPENV}"
-                    sh '''
-                        echo "Node version: $(node -v)"
-                        echo "NPM version: $(npm -v)"
-                        
-                        # Install dependencies
-                        npm ci
-                    '''
-                }
+                sh '''
+                    echo "Node version: $(node -v)"
+                    echo "NPM version: $(npm -v)"
+                    npm ci
+                '''
             }
         }
 
-        stage('Prepare Test Run') {
+        stage('Prepare Workspace') {
             steps {
-                script {
-                    sh '''
-                        echo "Cleaning previous reports"
-                        rm -rf playwright-report test-results
-                    '''
-                }
+                sh '''
+                    echo "Cleaning previous test artifacts"
+                    rm -rf playwright-report test-results
+                '''
             }
         }
 
-        stage('Execute Tests') {
+        stage('Run Playwright Tests') {
             steps {
                 script {
                     try {
                         sh """
-                            echo "Running Playwright tests in environment: ${APPENV}"
-                            export APPENV="${APPENV}"
-                            npx playwright test
+                            echo "Running Playwright tests in PRODUCTION environment"
+                            export APPENV=prod
+                            npx playwright test --reporter=html
                         """
                     } catch (err) {
-                        echo "Test execution completed with some failures: ${err}"
+                        currentBuild.result = 'FAILURE'
+                        error("Playwright test failures detected")
                     }
                 }
             }
         }
 
-       stage('Generate Reports') {
-    steps {
-        script {
-            sh '''
-                echo "Generating Playwright report"
-                if [ -d "playwright-report" ]; then
-                    echo "Playwright report found. Skipping interactive show-report..."
-                else
-                    echo "No Playwright report found. Skipping..."
-                fi
-            '''
-        }
-    }
-}
-    
-        stage('Publish Results') {
+        stage('Publish Reports') {
             steps {
-                script {
-                    archiveArtifacts(
-                        artifacts: '''
-                            playwright-report/**/*,
-                            test-results/**/*,
-                            videos/**/*.webm,
-                            screenshots/**/*.png
-                        ''',
-                        allowEmptyArchive: true
-                    )
-                    
-                    publishHTML(
-                        target: [
-                            allowMissing: true,
-                            alwaysLinkToLastBuild: true,
-                            keepAll: true,
-                            reportDir: 'playwright-report',
-                            reportFiles: 'index.html',
-                            reportName: "Playwright Test Report - ${APPENV}"
-                        ]
-                    )
-                }
+                archiveArtifacts(
+                    artifacts: '''
+                        playwright-report/**/*,
+                        test-results/**/*,
+                        **/*.png,
+                        **/*.webm
+                    ''',
+                    allowEmptyArchive: true
+                )
+
+                publishHTML(
+                    target: [
+                        allowMissing: true,
+                        keepAll: true,
+                        alwaysLinkToLastBuild: true,
+                        reportDir: 'playwright-report',
+                        reportFiles: 'index.html',
+                        reportName: 'Playwright Test Report (PROD)'
+                    ]
+                )
             }
         }
     }
 
     post {
-        always {
-            cleanWs()
-        }
-        success {
-            echo 'All stages completed successfully!'
-        }
-        unstable {
-            echo 'Test execution completed with some failures. Check the report for details.'
-        }
+
         failure {
-            echo 'Pipeline failed! Check the logs and report for details.'
+            emailext(
+                subject: "PROD Playwright FAILED | ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                body: """
+                    <h2>Production Test Failure</h2>
+                    <p><b>Environment:</b> PROD</p>
+                    <p><b>Job:</b> ${env.JOB_NAME}</p>
+                    <p><b>Build:</b> #${env.BUILD_NUMBER}</p>
+                    <p>
+                        <a href="${env.BUILD_URL}">Jenkins Build</a><br/>
+                        <a href="${env.BUILD_URL}Playwright_Test_Report_(PROD)/">
+                            Playwright HTML Report
+                        </a>
+                    </p>
+                """,
+                to: "alirajujnu11@gmail.com"
+            )
+        }
+
+        success {
+            echo "Production Playwright tests passed"
+        }
+
+        always {
+            echo "Cleaning workspace"
+            cleanWs()
         }
     }
 }
