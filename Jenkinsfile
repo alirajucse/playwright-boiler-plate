@@ -2,30 +2,35 @@ pipeline {
     agent any
 
     triggers {
-        // Run twice every 24 hours (production only)
+        // Two automatic builds every 24 hours
         cron('H H/12 * * *')
     }
 
+    parameters {
+        choice(
+            name: 'APPENV',
+            choices: ['prod', 'local', 'dev', 'preprod'],
+            description: 'Select the environment to run tests against'
+        )
+    }
+    
     tools {
         nodejs 'NodeJS 18'
     }
 
     environment {
-        APPENV = 'prod'
-        CI = 'true'
-        PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
+        APPENV = "${params.APPENV}"
     }
 
     options {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timestamps()
         ansiColor('xterm')
-        disableConcurrentBuilds()
         skipDefaultCheckout()
+        disableConcurrentBuilds()
     }
 
     stages {
-
         stage('Checkout') {
             steps {
                 cleanWs()
@@ -33,95 +38,128 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Setup') {
             steps {
-                sh '''
-                    echo "Node version: $(node -v)"
-                    echo "NPM version: $(npm -v)"
-                    npm ci
-                '''
+                script {
+                    echo "Setting up environment: ${APPENV}"
+                    sh '''
+                        echo "Node version: $(node -v)"
+                        echo "NPM version: $(npm -v)"
+                        npm ci
+                    '''
+                }
             }
         }
 
-        stage('Prepare Workspace') {
+        stage('Prepare Test Run') {
             steps {
-                sh '''
-                    echo "Cleaning previous test artifacts"
-                    rm -rf playwright-report test-results
-                '''
+                script {
+                    sh '''
+                        echo "Cleaning previous reports"
+                        rm -rf playwright-report test-results
+                    '''
+                }
             }
         }
 
-        stage('Run Playwright Tests') {
+        stage('Execute Tests') {
             steps {
                 script {
                     try {
                         sh """
-                            echo "Running Playwright tests in PRODUCTION environment"
-                            export APPENV=prod
-                            npx playwright test --reporter=html
+                            echo "Running Playwright tests in environment: ${APPENV}"
+                            export APPENV="${APPENV}"
+                            npx playwright test
                         """
                     } catch (err) {
                         currentBuild.result = 'FAILURE'
-                        error("Playwright test failures detected")
+                        error("Playwright tests failed")
                     }
                 }
             }
         }
 
-        stage('Publish Reports') {
+        stage('Generate Reports') {
             steps {
-                archiveArtifacts(
-                    artifacts: '''
-                        playwright-report/**/*,
-                        test-results/**/*,
-                        **/*.png,
-                        **/*.webm
-                    ''',
-                    allowEmptyArchive: true
-                )
-
-                publishHTML(
-                    target: [
-                        allowMissing: true,
-                        keepAll: true,
-                        alwaysLinkToLastBuild: true,
-                        reportDir: 'playwright-report',
-                        reportFiles: 'index.html',
-                        reportName: 'Playwright Test Report (PROD)'
-                    ]
-                )
+                script {
+                    sh '''
+                        echo "Generating Playwright report"
+                        if [ -d "playwright-report" ]; then
+                            echo "Playwright report found."
+                        else
+                            echo "No Playwright report found."
+                        fi
+                    '''
+                }
+            }
+        }
+    
+        stage('Publish Results') {
+            steps {
+                script {
+                    archiveArtifacts(
+                        artifacts: '''
+                            playwright-report/**/*,
+                            test-results/**/*,
+                            videos/**/*.webm,
+                            screenshots/**/*.png
+                        ''',
+                        allowEmptyArchive: true
+                    )
+                    
+                    publishHTML(
+                        target: [
+                            allowMissing: true,
+                            alwaysLinkToLastBuild: true,
+                            keepAll: true,
+                            reportDir: 'playwright-report',
+                            reportFiles: 'index.html',
+                            reportName: "Playwright Test Report - ${APPENV}"
+                        ]
+                    )
+                }
             }
         }
     }
 
     post {
-
         failure {
-            emailext(
-                subject: "PROD Playwright FAILED | ${env.JOB_NAME} #${env.BUILD_NUMBER}",
-                body: """
-                    <h2>Production Test Failure</h2>
-                    <p><b>Environment:</b> PROD</p>
-                    <p><b>Job:</b> ${env.JOB_NAME}</p>
-                    <p><b>Build:</b> #${env.BUILD_NUMBER}</p>
-                    <p>
-                        <a href="${env.BUILD_URL}">Jenkins Build</a><br/>
-                        <a href="${env.BUILD_URL}Playwright_Test_Report_(PROD)/">
-                            Playwright HTML Report
-                        </a>
-                    </p>
-                """,
-                to: "alirajujnu11@gmail.com"
-            )
+            script {
+                // Detect cron-triggered build
+                def isCronBuild = currentBuild.rawBuild
+                    .getCause(hudson.triggers.TimerTrigger$TimerTriggerCause) != null
+
+                if (isCronBuild && APPENV == 'prod') {
+                    emailext(
+                        subject: "PROD Auto Playwright Failed | ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        body: """
+                            <h2>Production Auto Test Failure</h2>
+
+                            <p><b>Environment:</b> PROD</p>
+                            <p><b>Trigger:</b> Scheduled (Cron)</p>
+                            <p><b>Job:</b> ${env.JOB_NAME}</p>
+                            <p><b>Build:</b> #${env.BUILD_NUMBER}</p>
+
+                            <p>
+                              <a href="${env.BUILD_URL}">Jenkins Build</a><br/>
+                              <a href="${env.BUILD_URL}Playwright_Test_Report_-_${APPENV}/">
+                                  Playwright HTML Report
+                              </a>
+                            </p>
+                        """,
+                        to: "your-email@gmail.com"
+                    )
+                } else {
+                    echo "Failure detected, but not a cron-triggered PROD build. No email sent."
+                }
+            }
         }
 
         success {
-            echo "Production Playwright tests passed"
+            echo 'All stages completed successfully!'
         }
 
         always {
-            echo "Cleaning workspace"
             cleanWs()
         }
     }
