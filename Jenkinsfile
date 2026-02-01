@@ -46,6 +46,7 @@ pipeline {
                         echo "Node version: $(node -v)"
                         echo "NPM version: $(npm -v)"
                         npm ci
+                        npx playwright install --with-deps
                     '''
                 }
             }
