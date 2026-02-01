@@ -3,7 +3,7 @@ pipeline {
 
     triggers {
         // Runs twice every 24 hours automatically on production
-        cron('H H/12 * * *')
+        cron('H H/12 * * *') 
     }
 
     parameters {
@@ -19,7 +19,7 @@ pipeline {
     }
 
     environment {
-        APPENV = "${params.APPENV}"
+        APPENV = "${params.APPENV ?: 'dev'}"
         QA_ALERT_EMAILS = credentials('QA_ALERT_EMAILS')
     }
 
@@ -33,24 +33,18 @@ pipeline {
 
     stages {
 
-        stage('Resolve Environment') {
+        stage('Checkout') {
             steps {
                 script {
-                    def isCronBuild = currentBuild.rawBuild
-                        .getCause(hudson.triggers.TimerTrigger$TimerTriggerCause) != null
-
+                    def isCronBuild = currentBuild.getBuildCauses('hudson.triggers.TimerTrigger$TimerTriggerCause').size() > 0
                     if (isCronBuild) {
                         env.APPENV = 'prod'
                         echo "Cron build detected → forcing APPENV=prod"
                     } else {
-                        echo "Manual build → APPENV=${APPENV}"
+                        echo "Manual build → APPENV=${env.APPENV}"
                     }
                 }
-            }
-        }
 
-        stage('Checkout') {
-            steps {
                 cleanWs()
                 checkout scm
             }
@@ -61,9 +55,7 @@ pipeline {
                 sh '''
                     echo "Node version: $(node -v)"
                     echo "NPM version: $(npm -v)"
-
                     npm ci
-
                     echo "Installing Playwright browsers"
                     npx playwright install
                 '''
@@ -72,26 +64,17 @@ pipeline {
 
         stage('Prepare Test Run') {
             steps {
-                sh '''
-                    rm -rf playwright-report test-results
-                '''
+                sh 'rm -rf playwright-report test-results'
             }
         }
 
         stage('Execute Tests') {
             steps {
-                script {
-                    try {
-                        sh """
-                            echo "Running Playwright tests in ${APPENV}"
-                            export APPENV="${APPENV}"
-                            npx playwright test
-                        """
-                    } catch (err) {
-                        currentBuild.result = 'FAILURE'
-                        error("Playwright tests failed")
-                    }
-                }
+                sh """
+                    echo "Running Playwright tests in ${APPENV}"
+                    export APPENV="${APPENV}"
+                    npx playwright test
+                """
             }
         }
 
@@ -136,21 +119,18 @@ pipeline {
     post {
         failure {
             script {
-                def isCronBuild = currentBuild.rawBuild
-                    .getCause(hudson.triggers.TimerTrigger$TimerTriggerCause) != null
+                def isCronBuild = currentBuild.getBuildCauses('hudson.triggers.TimerTrigger$TimerTriggerCause').size() > 0
 
                 if (isCronBuild && APPENV == 'prod') {
                     emailext(
                         to: "${QA_ALERT_EMAILS}",
-                        subject: "PROD Playwright Auto Test FAILED | ${env.JOB_NAME} #${env.BUILD_NUMBER}",
+                        subject: "Playwright Tests FAILED | ${env.JOB_NAME} #${env.BUILD_NUMBER}",
                         body: """
                             <h2>Production Auto Test Failure</h2>
-
                             <p><b>Environment:</b> PROD</p>
                             <p><b>Trigger:</b> Scheduled (Cron)</p>
                             <p><b>Job:</b> ${env.JOB_NAME}</p>
                             <p><b>Build:</b> #${env.BUILD_NUMBER}</p>
-
                             <p>
                               <a href="${env.BUILD_URL}">Jenkins Build</a><br/>
                               <a href="${env.BUILD_URL}Playwright_Test_Report_-_${APPENV}/">
